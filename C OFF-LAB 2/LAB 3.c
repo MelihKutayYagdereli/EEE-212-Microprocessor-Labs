@@ -1,0 +1,135 @@
+#include <stdio.h>
+#include <MKL25Z4.h>
+#include <math.h>
+ 
+volatile unsigned mode=1;/*mode select 1=sin 2=saw 3= square*/
+void ADC0_init(void);
+void LED_init(void);
+void DAC0_init(void);
+void Delay(volatile unsigned int time_del);
+void init_switch(void);
+void PORTA_IRQHandler(void);
+void delayMs(int n);
+ 
+int main (void)
+
+{         
+int i;
+             
+const static int SinLookup[] ={
+954,992,1031,1070,1108,1147,1185,1222,1259,1296,1332,1367,1402,1436,1469,1501,1533,1563,1592,1621,1648,1674,1699,1723,1745,1766,1786,1804,1821,1836,1850,1863,1874,1883,1891,1897,1902,1905,
+1907,1907,1905,1902,1897,1891,1883,1874,1863,1850,1836,1821,1804,1786,1766,1745,1723,1699,1674,1648,1621,1592,1563,1533,1501,1469,1436,1402,1367,1332,1296,1259,1222,1185,1147,1108,1070,1031,
+992,954,915,876,837,799,760,722,685,648,611,575,540,505,471,438,406,374,344,315,286,259,233,208,184,162,141,121,103,86,71,57,44,33,24,16,10,5,
+2,0,0,2,5,10,16,24,33,44,57,71,86,103,121,141,162,184,208,233,259,286,315,344,374,406,438,471,505,540,575,611,648,685,722,760,799,837,
+876,915,954,};
+const static int SawLookup[] ={
+29,58,87,116,144,173,202,231,260,289,318,347,376,405,433,462,491,520,549,578,
+607,636,665,693,722,751,780,809,838,867,896,925,954,982,1011,1040,1069,1098,1127,1156,
+1185,1214,1242,1271,1300,1329,1358,1387,1416,1445,1474,1502,1531,1560,1589,1618,1647,1676,1705,1734,
+1763,1791,1820,1849,1878,1907};
+const static int SquareLookup[] ={
+1907, 1907, 1907, 1907, 1907, 1907,1907, 1907, 1907, 1907, 1907, 1907,1907, 1907, 
+1907, 1907, 1907, 1907,1907, 1907, 
+0, 0, 0, 0, 0,0,0, 0, 0, 0, 0,0,0, 0, 0, 0, 0,0,0, 0};
+
+			short int result;
+             __disable_irq();
+             ADC0_init();
+             DAC0_init();
+             init_switch();
+             
+  while (1) {
+  	
+    ADC0->SC1[0] = 0;  /* start conversion on channel 0 */
+    while(!(ADC0->SC1[0] & 0x80)) { }
+    
+    result = ADC0->R[0];
+    
+    if (mode == 1){    
+        ADC0->SC1[0] = 0;
+        while(!(ADC0->SC1[0] & 0x80)) { } 
+        result = ADC0->R[0];                  
+		for (i = 0; i < 154; i++) {
+            DAC0->DAT[0].DATL = (result*SinLookup[i]/1907) & 0xff;
+			DAC0->DAT[0].DATH = ((result*SinLookup[i]/1907) >> 8) & 0x0f;
+            Delay(1);
+                           }
+			}
+ 
+	else if (mode == 2){
+    	ADC0->SC1[0] = 0;
+    	while(!(ADC0->SC1[0] & 0x80)) { } 
+   		result = ADC0->R[0];
+		for (i = 0; i < 66; i++) {
+    	    DAC0->DAT[0].DATL = (result*SawLookup[i]/1907) & 0xff;
+        	DAC0->DAT[0].DATH = ((result*SawLookup[i]/1907) >> 8) & 0x0f;
+       		Delay(23);
+                        }
+                           }
+ 
+ 
+	else if (mode == 3){   
+	            ADC0->SC1[0] = 0;
+	            hile(!(ADC0->SC1[0] & 0x80)) { } 
+	            result = ADC0->R[0];
+	            for (i = 0; i < 40; i++) {
+                    DAC0->DAT[0].DATL = (result*SquareLookup[i]/1907) & 0xff;
+                    DAC0->DAT[0].DATH = ((result*SquareLookup[i]/1907) >> 8) & 0x0f;
+                    Delay(55);
+             			}
+                           }
+}
+             }
+void ADC0_init(void)
+{
+             SIM->SCGC5 |= 0x2000;
+             PORTE->PCR[20] = 0;   /* Get input from port E20*/
+             SIM->SCGC6 |= 0x8000000;
+             ADC0->SC2 &= ~0x40;
+             ADC0->CFG1 = 0x40 | 0x10 | 0x04 | 0x00; 
+}
+ 
+
+ 
+ 
+void DAC0_init(void) 
+{
+             PORTE->PCR[30] &= ~(0x700); /* Get output from port E30*/
+             SIM->SCGC6 |= 0x80000000;
+             DAC0->C1 = 0;
+             DAC0->C0 = 0x80 | 0x20;
+}
+ 
+void Delay(volatile unsigned int time_del) {
+  while (time_del--) 
+                           {
+  }
+}
+ 
+void delayMs(int n) 
+{
+             int i;
+             int j;
+             for(i = 0 ; i < n; i++)
+             for (j = 0; j < 7000; j++) {}
+}
+void init_switch(void) { /* Configure IRQ for button in Port A2*/
+  SIM->SCGC5 |=  SIM_SCGC5_PORTA_MASK;
+  PORTA->PCR[2] |= 0x00100;
+  PORTA->PCR[2] |= 0x00003;
+  PTA->PDDR &= ~0x0004;
+  PORTA->PCR[2] &= ~0xF0000;
+  PORTA->PCR[2] |= 0xA0000;
+  NVIC->ISER[0] |= 0x40000000;
+  __enable_irq();
+}
+ 
+void PORTA_IRQHandler(void) {  
+    if(mode==3) { /* make a loop 1-2-3-1-2-...*/
+		mode=0;}							
+
+    mode++;
+	delayMs(30000);
+    PORTA->ISFR = 0xffffffff;
+ 
+}
